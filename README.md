@@ -174,6 +174,7 @@ tests/                        automated tests (npm test)
 ```bash
 npm test          # run the tests once
 npm run test:ui   # run the tests in a browser UI
+npm run e2e       # run the learner flow in Google Chrome (build the course first)
 ```
 
-The build tests run the real build against small test courses in fixtures (`tests/fixtures/`). The store test loads the real `assets/js/store-local.js`.
+The build tests run the real build against small test courses in fixtures (`tests/fixtures/`). The store test loads the real `assets/js/store-local.js`. The end-to-end check opens the site in Chrome, reads and answers every module from the course data, and checks the certificates, the phone layout, console errors and outside requests. It needs Google Chrome; set `CHROME_PATH` if Chrome is not in the usual place.

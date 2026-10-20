@@ -14,8 +14,7 @@
  * Nothing is sent to any online service. Assessment questions are written by hand.
  * The parts live in scripts/build/.
  */
-import { writeFile, readdir, mkdir, rm } from "node:fs/promises";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile, readdir, mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ROOT, TYPES, pad2, slug, stripTags, log } from "./build/common.mjs";

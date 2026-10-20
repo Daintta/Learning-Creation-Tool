@@ -6,7 +6,8 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
-    "build-course": "node scripts/build-course.mjs"
+    "build-course": "node scripts/build-course.mjs",
+    "e2e": "node tests/e2e/learner-flow.mjs"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^5.0.5",
@@ -14,6 +15,7 @@
     "jsdom": "^23.0.0",
     "mammoth": "^1.13.0",
     "marked": "^18.1.1",
+    "puppeteer-core": "^25.15.0",
     "vitest": "^5.0.5"
   }
 }
