@@ -18,13 +18,16 @@ in their own browser.
 
 ## Quick start
 
-You need [Node.js](https://nodejs.org) 18 or later.
+You need [Node.js](https://nodejs.org) 22.13 or later. The build and tests were run on Node 24.
 
 ```bash
 npm install
 ```
 
-1. Put your course documents in `course-docs/` (see [course-docs/README.md](course-docs/README.md)).
+To see a working course first, run `npm run build-course` and open the site. The example module in `course-docs/` shows how the files fit together.
+
+1. Put your course documents in `course-docs/` (see [course-docs/README.md](course-docs/README.md)). Each module needs its files named with the same number:
+   the lessons (`NN-Title.docx`, `.pdf` or `.md`), the practice questions (optional, `NN-Title-practice.md`) and the assessment (`NN-Title-assessment.md`).
 2. Set the course details in `course.config.json`.
 3. Build the course. If a module has no assessment file yet, the build stops and tells you which one.
    To create a blank one for each missing module, run it with `--template`:
@@ -136,7 +139,7 @@ assessment files and the build scripts stay in the repository and are not publis
 - **It is not tamper-proof.** Scoring happens in the learner's browser, so the answer key is present in
   the page's JavaScript. Certificate IDs cannot be verified centrally.
 - **There is no central reporting.** Learners send their certificate PDFs to show completion.
-- **PDF headings come from font size.** Check the list the build prints. Key Terms tables and Word-style structure need a Word file.
+- **PDF headings come from font size.** Check the list the build prints. Key Terms tables need a Word or Markdown file, because a PDF cannot hold one.
 
 ## Folder structure
 

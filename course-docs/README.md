@@ -2,6 +2,18 @@
 
 Put the course documents in this folder. The build turns each file into one module.
 
+## Files for one module
+
+Each module is three files in this folder, named with the same number and title:
+
+```
+09-Chapter-10.md              the lessons (or .docx or .pdf)
+09-Chapter-10-practice.md     the practice questions (optional)
+09-Chapter-10-assessment.md   the assessment questions
+```
+
+The example module in this folder follows the same pattern: `01-Example-module.docx` and `01-Example-module-assessment.md`.
+
 ## Steps
 
 1. **Add the documents.** Word (`.docx`), PDF (`.pdf`) and Markdown (`.md`) files are supported. A `README.md` in this folder is ignored.
