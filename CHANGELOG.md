@@ -2,7 +2,10 @@
 
 ## Unreleased
 
-- Rebuilt as a general learning tool. A course is built from the Word and PDF files in `course-docs/` with `npm run build-course`.
+- Simplified: PDF support removed, along with its heading detection and its library. Practice comes only from the companion `-practice.md` file, in the assessment layout. Knowledge Check and Answers sections in documents are no longer read, and the build warns about them. Assessments are only read from `NN-Title-assessment.md` next to the document. The build is split into `scripts/build/`.
+- Tests: the copies of app logic in the tests were replaced by a test of the real browser store. The build tests run against small test courses. The tests README and the separate regression checklist were folded into the main README.
+- The store's certificate IDs no longer use the letter L, as the certificate has never done.
+- Rebuilt as a general learning tool. A course is built from the Word and Markdown files in `course-docs/` with `npm run build-course`.
 - Assessment questions are written by hand. `--template` creates a blank file for any module that has none. The build will not publish a file until its status line is removed.
 - No online service is used. The Claude API drafting, its SDK dependency and the `questionsPerModule` setting were removed.
 - The three fixed pathway certificates are removed. Each module has a certificate, and passing every module earns the programme certificate.

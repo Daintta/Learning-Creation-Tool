@@ -1,113 +1,127 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+// Tests the real browser store (assets/js/store-local.js), not a copy of it.
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-describe('Store - Progress Tracking', () => {
+const STORE_SRC = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'assets', 'js', 'store-local.js'), 'utf8');
+
+// A small course: module 1 has two lessons and two questions, module 2 has one lesson and one question.
+const COURSE = {
+  config: { passMark: 80, requireAllLessonsRead: true, certificatePrefix: 'CERT', storageKey: 'test-learning-v1' },
+  catalog: [
+    { id: 'm01', version: '1.0', lessons: [{ id: 'a' }, { id: 'b' }] },
+    { id: 'm02', version: '1.0', lessons: [{ id: 'c' }] },
+  ],
+  assessments: [
+    { moduleId: 'm01', questions: [{ id: 'm01-q01', answer: 'x', explanation: 'e1' }, { id: 'm01-q02', answer: 'y', explanation: 'e2' }] },
+    { moduleId: 'm02', questions: [{ id: 'm02-q01', answer: 'z', explanation: 'e3' }] },
+  ],
+};
+
+// Loads a fresh copy of the store, the same way the page does: a plain script that sets Course.store.
+function loadStore() {
+  globalThis.window ??= globalThis;
+  globalThis.Course = JSON.parse(JSON.stringify(COURSE));
+  new Function(STORE_SRC)();
+  return globalThis.Course.store;
+}
+
+const passAll = async (store) => {
+  await store.markRead('m01', 'a');
+  await store.markRead('m01', 'b');
+  return store.submitAssessment('m01', { 'm01-q01': 'x', 'm01-q02': 'y' });
+};
+
+describe('browser store', () => {
   let store;
-  let mockData;
-
   beforeEach(() => {
-    // Mock localStorage
-    const store = new Map();
-    global.localStorage = {
-      getItem: (key) => store.get(key) || null,
-      setItem: (key, value) => store.set(key, value),
-      removeItem: (key) => store.delete(key),
-      clear: () => store.clear()
-    };
-
-    // Initialize mock store data
-    mockData = {
-      profile: { fullName: "Test User", email: "test@example.com" },
-      read: { m01: ["lesson-1", "lesson-2"], m02: [] },
-      practice: { m01: { best: 85, total: 100, at: new Date().toISOString() } },
-      attempts: { m01: [{ score: 85, percent: 85, passed: true }] },
-      certificates: {}
-    };
-
-    localStorage.setItem("daintta-pnt-learning-v1", JSON.stringify(mockData));
+    localStorage.clear();
+    store = loadStore();
+  });
+  afterEach(() => {
+    localStorage.clear();
   });
 
-  it('should load profile from localStorage', () => {
-    const data = JSON.parse(localStorage.getItem("daintta-pnt-learning-v1"));
-    expect(data.profile.fullName).toBe("Test User");
-    expect(data.profile.email).toBe("test@example.com");
+  it('records each lesson once', async () => {
+    await store.markRead('m01', 'a');
+    await store.markRead('m01', 'a');
+    await store.markRead('m01', 'b');
+    const state = await store.getState();
+    expect(state.read.m01).toEqual(['a', 'b']);
   });
 
-  it('should track lessons read', () => {
-    const data = JSON.parse(localStorage.getItem("daintta-pnt-learning-v1"));
-    expect(data.read.m01).toContain("lesson-1");
-    expect(data.read.m01).toContain("lesson-2");
-    expect(data.read.m01.length).toBe(2);
+  it('will not score an assessment until every lesson in the module is read', async () => {
+    await store.markRead('m01', 'a');
+    await expect(store.submitAssessment('m01', { 'm01-q01': 'x', 'm01-q02': 'y' }))
+      .rejects.toThrow('Read all lessons before taking the assessment.');
   });
 
-  it('should track practice scores', () => {
-    const data = JSON.parse(localStorage.getItem("daintta-pnt-learning-v1"));
-    expect(data.practice.m01.best).toBe(85);
-    expect(data.practice.m01.total).toBe(100);
+  it('scores correct answers as a pass, with a module certificate', async () => {
+    const res = await passAll(store);
+    expect(res.score).toBe(2);
+    expect(res.percent).toBe(100);
+    expect(res.passed).toBe(true);
+    expect(res.certificate.id).toMatch(/^CERT-M01-[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{4}-[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{4}$/);
+    expect(res.programmeCertificate).toBeNull();
   });
 
-  it('should track assessment attempts', () => {
-    const data = JSON.parse(localStorage.getItem("daintta-pnt-learning-v1"));
-    expect(data.attempts.m01[0].score).toBe(85);
-    expect(data.attempts.m01[0].passed).toBe(true);
+  it('fails a wrong attempt and issues no certificate', async () => {
+    await store.markRead('m01', 'a');
+    await store.markRead('m01', 'b');
+    const res = await store.submitAssessment('m01', { 'm01-q01': 'wrong', 'm01-q02': 'wrong' });
+    expect(res.passed).toBe(false);
+    expect(res.certificate).toBeNull();
+    const state = await store.getState();
+    expect(state.attempts.m01).toHaveLength(1);
+    expect(state.certificates.m01).toBeUndefined();
   });
 
-  it('should persist data across retrievals', () => {
-    const retrieved1 = JSON.parse(localStorage.getItem("daintta-pnt-learning-v1"));
-    const retrieved2 = JSON.parse(localStorage.getItem("daintta-pnt-learning-v1"));
-
-    expect(retrieved1).toEqual(retrieved2);
-  });
-});
-
-describe('Store - Module Progress Calculation', () => {
-  it('should determine module status as "new"', () => {
-    const lessonsRead = 0;
-    const hasAttempts = false;
-    const hasCertificate = false;
-
-    const status = hasCertificate ? 'passed' : (lessonsRead > 0 || hasAttempts) ? 'progress' : 'new';
-    expect(status).toBe('new');
+  it('issues the programme certificate only when every module is passed', async () => {
+    const first = await passAll(store);
+    expect(first.programmeCertificate).toBeNull();
+    await store.markRead('m02', 'c');
+    const second = await store.submitAssessment('m02', { 'm02-q01': 'z' });
+    expect(second.programmeCertificate.id).toMatch(/^CERT-ALL-/);
   });
 
-  it('should determine module status as "progress"', () => {
-    const lessonsRead = 2;
-    const hasAttempts = false;
-    const hasCertificate = false;
-
-    const status = hasCertificate ? 'passed' : (lessonsRead > 0 || hasAttempts) ? 'progress' : 'new';
-    expect(status).toBe('progress');
+  it('renames issued certificates when the learner changes their name', async () => {
+    await store.saveProfile({ fullName: 'Jane Smith', email: '' });
+    await passAll(store);
+    await store.saveProfile({ fullName: 'Jane Jones', email: '' });
+    const state = await store.getState();
+    expect(state.certificates.m01.fullName).toBe('Jane Jones');
   });
 
-  it('should determine module status as "passed"', () => {
-    const lessonsRead = 5;
-    const hasAttempts = true;
-    const hasCertificate = true;
-
-    const status = hasCertificate ? 'passed' : (lessonsRead > 0 || hasAttempts) ? 'progress' : 'new';
-    expect(status).toBe('passed');
-  });
-});
-
-describe('Store - Certificate Management', () => {
-  it('should award certificate on passing', () => {
-    const score = 85;
-    const total = 100;
-    const passMark = 80;
-    const percent = Math.round((score / total) * 100);
-    const passed = percent >= passMark;
-
-    expect(passed).toBe(true);
-    expect(percent).toBe(85);
+  it('keeps the best practice score', async () => {
+    await store.recordPractice('m01', 3, 5);
+    await store.recordPractice('m01', 1, 5);
+    const state = await store.getState();
+    expect(state.practice.m01.best).toBe(3);
   });
 
-  it('should not award certificate on failing', () => {
-    const score = 75;
-    const total = 100;
-    const passMark = 80;
-    const percent = Math.round((score / total) * 100);
-    const passed = percent >= passMark;
+  it('resets progress but keeps the learner profile', async () => {
+    await store.saveProfile({ fullName: 'Jane Smith', email: '' });
+    await passAll(store);
+    await store.resetProgress();
+    const state = await store.getState();
+    expect(state.read).toEqual({});
+    expect(state.certificates).toEqual({});
+    expect((await store.getProfile()).fullName).toBe('Jane Smith');
+  });
 
-    expect(passed).toBe(false);
-    expect(percent).toBe(75);
+  it('keeps working when browser storage is blocked', async () => {
+    const original = { get: localStorage.getItem, set: localStorage.setItem };
+    localStorage.getItem = () => { throw new Error('blocked'); };
+    localStorage.setItem = () => { throw new Error('blocked'); };
+    try {
+      const blocked = loadStore();
+      await blocked.markRead('m01', 'a');
+      const state = await blocked.getState();
+      expect(state.read.m01).toEqual(['a']);
+    } finally {
+      localStorage.getItem = original.get;
+      localStorage.setItem = original.set;
+    }
   });
 });

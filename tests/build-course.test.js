@@ -1,21 +1,14 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, copyFileSync, readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { describe, it, expect, afterAll } from 'vitest';
+import { rmSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import {
-  titleFromFile, splitLessons, parseAssessment, templateDraft, stripTags, slug,
-} from '../scripts/build-course.mjs';
-
-const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SCRIPT = path.join(REPO, 'scripts', 'build-course.mjs');
+import { titleFromFile, headingLevel, splitSections, parseAssessment, templateDraft, stripTags, slug } from '../scripts/build-course.mjs';
+import { makeCourse, runBuild, readModuleData, readAssessments, fileExists } from './helpers/build.mjs';
 
 describe('titleFromFile', () => {
-  it('drops the number prefix and extension and tidies separators', () => {
+  it('removes the number prefix and the extension, and tidies separators', () => {
     expect(titleFromFile('/docs/02-Core_concepts-now.docx')).toBe('Core concepts now');
-    expect(titleFromFile('01-Intro.PDF')).toBe('Intro');
+    expect(titleFromFile('/docs/01-Risk-Management.md')).toBe('Risk Management');
   });
   it('falls back when nothing is left', () => {
     expect(titleFromFile('01-.docx')).toBe('Untitled module');
@@ -32,27 +25,19 @@ describe('stripTags and slug', () => {
   });
 });
 
-describe('splitLessons', () => {
-  it('starts a lesson at each Heading 1 and keeps text before the first heading', () => {
-    const html = '<p>Intro text</p><h1>Alpha</h1><p>a body</p><h1>Beta</h1><p>b body</p>';
-    const lessons = splitLessons(html, 'm01');
-    expect(lessons.map((l) => l.title)).toEqual(['Alpha', 'Beta']);
-    expect(lessons[0].id).toBe('m01-alpha');
-    expect(lessons[0].html).toContain('Intro text');
-    expect(lessons[0].html).toContain('a body');
-    expect(lessons[1].html).not.toContain('Intro text');
+describe('heading levels', () => {
+  it('uses Heading 1 when there is one, otherwise Heading 2, otherwise the whole document', () => {
+    expect(headingLevel('<h1>A</h1><h2>x</h2>')).toBe(1);
+    expect(headingLevel('<p>intro</p><h2>A</h2>')).toBe(2);
+    expect(headingLevel('<p>plain</p>')).toBe(0);
   });
-  it('makes lesson ids unique when headings repeat', () => {
-    const lessons = splitLessons('<h1>Same</h1><p>x</p><h1>Same</h1><p>y</p>', 'm02');
-    expect(lessons.map((l) => l.id)).toEqual(['m02-same', 'm02-same-2']);
+  it('splits at Heading 2 and keeps text before the first heading with the first section', () => {
+    const sections = splitSections('<p>lead</p><h2>A</h2><p>a</p><h2>B</h2><p>b</p>');
+    expect(sections.map((s) => s.title)).toEqual(['A', 'B']);
+    expect(sections[0].html).toContain('lead');
   });
-  it('makes one lesson when there are no headings', () => {
-    const lessons = splitLessons('<p>Just text</p>', 'm03');
-    expect(lessons).toHaveLength(1);
-    expect(lessons[0].title).toBe('Content');
-  });
-  it('drops sections with no text', () => {
-    expect(splitLessons('<h1>Empty</h1><p>   </p>', 'm04')).toEqual([]);
+  it('makes one section when there are no headings', () => {
+    expect(splitSections('<p>plain</p>')).toEqual([{ title: 'Content', html: '<p>plain</p>' }]);
   });
 });
 
@@ -99,8 +84,7 @@ describe('parseAssessment', () => {
 
   it('keeps the correct answer and explanation for single choice', () => {
     const [single] = qs;
-    const right = single.options.find((o) => o.text === 'Right');
-    expect(single.answer).toBe(right.id);
+    expect(single.answer).toBe(single.options.find((o) => o.text === 'Right').id);
     expect(single.explanation).toBe('Because right.');
     expect(single.prompt).toBe('Which is correct?');
   });
@@ -119,14 +103,11 @@ describe('parseAssessment', () => {
     const [, , , match, order] = qs;
     expect(match.left).toHaveLength(2);
     expect(match.answer.split(';')).toHaveLength(2);
-    expect(order.answer.split('>')).toHaveLength(3);
-    const firstId = order.items.find((i) => i.text === 'First').id;
-    expect(order.answer.split('>')[0]).toBe(firstId);
+    expect(order.answer.split('>')[0]).toBe(order.items.find((i) => i.text === 'First').id);
   });
 
   it('gives stable ids on repeated parses', () => {
-    const again = parseAssessment(SAMPLE, 'm01', 'sample.md');
-    expect(again).toEqual(qs);
+    expect(parseAssessment(SAMPLE, 'm01', 'sample.md')).toEqual(qs);
   });
 
   it('rejects malformed questions with a message that names the file', () => {
@@ -138,63 +119,60 @@ describe('parseAssessment', () => {
 });
 
 describe('templateDraft', () => {
-  const mod = { id: 'm01', number: 1, title: 'Sample', text: '' };
-
   it('is marked as a draft and parses', () => {
-    const md = templateDraft(mod);
+    const md = templateDraft({ id: 'm01', number: 1, title: 'Sample' });
     expect(md).toMatch(/status:\s*draft/);
     expect(parseAssessment(md, 'm01', 'template.md')).toHaveLength(1);
   });
 });
 
 describe('npm run build-course (command line)', () => {
-  let root;
-  const run = (...flags) => spawnSync(process.execPath, [SCRIPT, ...flags], {
-    cwd: root, encoding: 'utf8', env: { ...process.env, COURSE_ROOT: root },
-  });
+  const roots = [];
+  const course = (docs, options) => { const root = makeCourse(docs, options); roots.push(root); return root; };
+  afterAll(() => roots.forEach((r) => rmSync(r, { recursive: true, force: true })));
 
-  beforeAll(() => {
-    root = mkdtempSync(path.join(tmpdir(), 'course-build-'));
-    mkdirSync(path.join(root, 'course-docs'));
-    mkdirSync(path.join(root, 'assessments'));
-    copyFileSync(path.join(REPO, 'course.config.json'), path.join(root, 'course.config.json'));
-    copyFileSync(path.join(REPO, 'tests', 'fixtures', '01-Example-module.docx'), path.join(root, 'course-docs', '01-Example-module.docx'));
-  });
-
-  afterAll(() => {
-    rmSync(root, { recursive: true, force: true });
-  });
-
-  it('stops when a module has no assessment', () => {
-    const res = run();
+  it('stops when a module has no assessment, and names the file to write', () => {
+    const res = runBuild(course(['01-Example-module.docx'], { assessments: false }));
     expect(res.status).not.toBe(0);
-    expect(res.stderr).toMatch(/No assessment for m01/);
+    expect(res.stderr).toMatch(/No assessment for m01\. Write course-docs\/01-Example-module-assessment\.md/);
   });
 
-  it('creates a blank template with --template and refuses to publish it', () => {
-    const res = run('--template');
+  it('creates the companion assessment with --template and refuses to publish it', () => {
+    const root = course(['01-Example-module.docx'], { assessments: false });
+    const res = runBuild(root, '--template');
     expect(res.status).not.toBe(0);
     expect(res.stderr).toMatch(/Unapproved drafts: course-docs\/01-Example-module-assessment\.md/);
     expect(readFileSync(path.join(root, 'course-docs', '01-Example-module-assessment.md'), 'utf8')).toMatch(/status:\s*draft/);
-    expect(existsSync(path.join(root, 'content', 'catalog.js'))).toBe(false);
+    expect(fileExists(root, 'content', 'catalog.js')).toBe(false);
   });
 
   it('publishes once the draft line is removed', () => {
+    const root = course(['01-Example-module.docx']);
     const file = path.join(root, 'course-docs', '01-Example-module-assessment.md');
-    const approved = readFileSync(file, 'utf8').replace(/^<!--\s*status:\s*draft.*\n/m, '');
-    writeFileSync(file, approved);
-    const res = run();
-    expect(res.status).toBe(0);
-    const catalog = readFileSync(path.join(root, 'content', 'catalog.js'), 'utf8');
-    expect(catalog).toContain('"title": "Example module"');
-    expect(readFileSync(path.join(root, 'content', 'modules', 'm01.js'), 'utf8')).toContain('Course.registerModule');
+    writeFileSync(file, readFileSync(file, 'utf8').replace(/^<!--\s*status:\s*draft.*\n/m, ''));
+    expect(runBuild(root).status).toBe(0);
+    expect(readModuleData(root).title).toBe('Example module');
     expect(readFileSync(path.join(root, 'content', 'course-config.js'), 'utf8')).toContain('window.CourseSettings');
   });
 
   it('builds with drafts only when --allow-drafts is given, and warns', () => {
+    const root = course(['01-Example-module.docx'], { assessments: false });
     writeFileSync(path.join(root, 'course-docs', '01-Example-module-assessment.md'), '# t\n<!-- status: draft -->\n## single\nQ\n- a\n* b\n');
-    const res = run('--allow-drafts');
+    const res = runBuild(root, '--allow-drafts');
     expect(res.status).toBe(0);
     expect(res.stdout).toMatch(/WARNING: building with unapproved drafts/);
+  });
+
+  it('uses the companion assessment file next to the document', () => {
+    const root = course(['11-Format-check.md', '11-Format-check-assessment.md'], { assessments: false });
+    expect(runBuild(root).status).toBe(0);
+    expect(readAssessments(root)[0].questions[0].prompt).toBe('Is this a companion assessment?');
+  });
+
+  it('ignores a README.md in course-docs, and fails when nothing else is there', () => {
+    expect(runBuild(course(['01-Example-module.docx'], { extra: { 'README.md': '# Notes\n' } })).status).toBe(0);
+    const res = runBuild(course([], { extra: { 'README.md': '# Notes\n' } }));
+    expect(res.status).not.toBe(0);
+    expect(res.stderr).toMatch(/No \.docx or \.md files/);
   });
 });

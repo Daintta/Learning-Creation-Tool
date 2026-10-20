@@ -12,7 +12,7 @@
     try { localStorage.setItem(KEY, JSON.stringify(d)); } catch (e) { mem = d; }
   }
   function certId(moduleId) {
-    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    const alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no 0, O, 1, I or L, as on the certificate
     const bytes = new Uint8Array(8); (window.crypto || window.msCrypto).getRandomValues(bytes);
     const rand = Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("");
     const tag = moduleId === "programme" ? "ALL" : moduleId.replace("m", "M");

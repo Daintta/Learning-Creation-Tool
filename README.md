@@ -1,6 +1,6 @@
 # Learning Tool
 
-Build a self-paced online course from your own Word, PDF or Markdown documents. Learners work through
+Build a self-paced online course from your own Word or Markdown documents. Learners work through
 each module, pass a short assessment and earn a printable certificate for each module, plus a
 programme certificate when every module is passed.
 
@@ -9,16 +9,17 @@ in their own browser.
 
 ## What you get
 
-- **Lessons** from your documents. In a Word file, each Heading 1 becomes a lesson (or each Heading 2, if there are no Heading 1s). In a PDF, headings are found from font size: larger short lines start a lesson. The build lists the headings it found so you can check them, and warns when a file splits badly.
-- **Assessments** for each module: single choice, multi-select, true/false, matching and ordering.
-  Questions are shuffled on every attempt.
+- **Lessons** from your documents. In a Word file, each Heading 1 becomes a lesson (or each Heading 2, if there are no Heading 1s). In a Markdown file, each `#` heading does the same. The build warns you when a file splits badly.
+- **Practice questions** from a companion file, with instant feedback. They do not count towards the certificate.
+- **Assessments** for each module: single choice, multi-select, true/false, matching and ordering. Questions are shuffled on every attempt.
 - **Rules you set:** the pass mark, and whether learners must read every lesson before the assessment unlocks.
 - **Certificates** as PDFs, one per module and one for the programme. Each shows the learner's name, score, date and a certificate ID.
+- **Glossary** from a Key Terms table in each document.
 - **Resources** page, from references you list in the course config.
 
 ## Quick start
 
-You need [Node.js](https://nodejs.org) 22.13 or later. The build and tests were run on Node 24.
+You need [Node.js](https://nodejs.org) 22.12 or later. The build and tests were run on Node 24.
 
 ```bash
 npm install
@@ -27,7 +28,7 @@ npm install
 To see a working course first, run `npm run build-course` and open the site. The example module in `course-docs/` shows how the files fit together.
 
 1. Put your course documents in `course-docs/` (see [course-docs/README.md](course-docs/README.md)). Each module needs its files named with the same number:
-   the lessons (`NN-Title.docx`, `.pdf` or `.md`), the practice questions (optional, `NN-Title-practice.md`) and the assessment (`NN-Title-assessment.md`).
+   the lessons (`NN-Title.docx` or `NN-Title.md`), the practice questions (optional, `NN-Title-practice.md`) and the assessment (`NN-Title-assessment.md`).
 2. Set the course details in `course.config.json`.
 3. Build the course. If a module has no assessment file yet, the build stops and tells you which one.
    To create a blank one for each missing module, run it with `--template`:
@@ -114,10 +115,18 @@ Instruction text. List the items in the CORRECT order; they are shuffled on scre
 > Explanation.
 ```
 
-Each file can have a different number of questions.
+Each file can have a different number of questions. Practice files use the same layout, without match and order.
 
-**Have a subject-matter expert review the questions before the course goes live.** The build will not
-publish a file that still has the draft line.
+## Before you publish
+
+These checks are manual. Run them before each release.
+
+- [ ] A subject-matter expert has reviewed every assessment and practice question, and the draft lines are removed.
+- [ ] `npm run build-course` completes without `--allow-drafts`, and every warning has been read.
+- [ ] Each lesson's images have alt text, and every "Further learning" link opens.
+- [ ] A certificate PDF opens and shows the right name, score, date and ID, in Chrome, Edge and Safari.
+- [ ] The main screens have no sideways scrolling on a phone.
+- [ ] The footer shows the right version, and the site loads over HTTPS once deployed.
 
 ## Deploy to GitHub Pages
 
@@ -134,20 +143,20 @@ assessment files and the build scripts stay in the repository and are not publis
 
 ## Limitations of the standalone version
 
+- **PDF files are not supported.** Save the document as Word or Markdown. PDFs are skipped with a note.
 - **Progress is per browser.** Learners who clear their browser data or switch device start again.
   Certificates should be saved as PDFs to keep a permanent copy.
 - **It is not tamper-proof.** Scoring happens in the learner's browser, so the answer key is present in
   the page's JavaScript. Certificate IDs cannot be verified centrally.
 - **There is no central reporting.** Learners send their certificate PDFs to show completion.
-- **PDF headings come from font size.** Check the list the build prints. Key Terms tables need a Word or Markdown file, because a PDF cannot hold one.
 
 ## Folder structure
 
 ```
-course-docs/                  your Word, PDF or Markdown documents (see course-docs/README.md)
+course-docs/                  your Word and Markdown documents, and their companion files (see course-docs/README.md)
 course.config.json            course settings
-course-docs/NN-Title-assessment.md   assessment questions, one file per module (next to its document)
-scripts/build-course.mjs      the build: documents and assessments to site content
+scripts/build-course.mjs      the build command
+scripts/build/                the build's parts: readers, lessons, assessments and practice
 index.html                    the app
 assets/css/app.css            styles
 assets/js/app.js              app logic
@@ -156,13 +165,15 @@ assets/js/certificate.js      certificate PDFs
 assets/js/config.js           app settings
 assets/img/                   logo, favicon and images from the documents
 content/                      generated by the build; do not edit by hand
-tests/                        unit tests (npm test)
+tests/                        automated tests (npm test)
 .github/workflows/            GitHub Pages deployment
 ```
 
 ## Development
 
 ```bash
-npm test          # run the unit tests
+npm test          # run the tests once
 npm run test:ui   # run the tests in a browser UI
 ```
+
+The build tests run the real build against small test courses in fixtures (`tests/fixtures/`). The store test loads the real `assets/js/store-local.js`.
