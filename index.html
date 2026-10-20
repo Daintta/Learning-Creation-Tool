@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Daintta Learning</title>
+  <meta name="description" content="Daintta Learning">
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+  <script src="content/course-config.js"></script>
+  <script src="assets/js/config.js"></script>
+
+  <!-- App content -->
+  <a class="skip" href="#view">Skip to content</a>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="#/"><img src="assets/img/logo-daintta.svg" alt="Daintta" width="108" height="24"><span>Daintta Learning</span></a>
+      <nav class="nav" id="nav" aria-label="Main" hidden>
+        <a href="#/" data-nav="home">Modules</a>
+        <a href="#/glossary" data-nav="glossary">Glossary</a>
+        <a href="#/resources" data-nav="resources">Resources</a>
+        <a href="#/certificates" data-nav="certs">Certificates</a>
+        <a href="#/profile" data-nav="profile">Your details</a>
+        <span class="who" id="who"></span>
+        <button id="dark-mode-toggle" class="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">🌙</button>
+      </nav>
+    </div>
+  </header>
+  <main id="view" tabindex="-1"><div class="loading" role="status">Loading…</div></main>
+  <footer class="footer">
+    <span>Daintta Learning</span>
+  </footer>
+  <dialog class="lightbox" id="lightbox" aria-label="Enlarged diagram">
+    <button class="btn" type="button">Close</button>
+    <img src="" alt="">
+  </dialog>
+
+  <script src="assets/vendor/pdf-lib.min.js"></script>
+  <script src="assets/vendor/fontkit.umd.min.js"></script>
+  <script src="assets/js/certificate.js"></script>
+  <script src="content/catalog.js"></script>
+  <script src="content/glossary.js"></script>
+  <script src="content/assessments.js"></script>
+  <script src="assets/js/store-local.js"></script>
+  <script src="assets/js/app.js"></script>
+</body>
+</html>

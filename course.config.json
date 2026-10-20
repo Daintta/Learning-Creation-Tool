@@ -1,0 +1,12 @@
+{
+  "title": "Daintta Learning",
+  "subtitle": "",
+  "organisation": "Daintta",
+  "passMark": 80,
+  "requireAllLessonsRead": true,
+  "revealAnswersOnFail": false,
+  "certificatePrefix": "CERT",
+  "contentVersion": "1.0",
+  "stages": null,
+  "resources": []
+}

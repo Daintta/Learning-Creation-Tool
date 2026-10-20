@@ -1,0 +1,19 @@
+{
+  "name": "daintta-learning-app",
+  "version": "0.9.16",
+  "type": "module",
+  "scripts": {
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage",
+    "build-course": "node scripts/build-course.mjs"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^5.0.5",
+    "@vitest/ui": "^5.0.5",
+    "jsdom": "^23.0.0",
+    "mammoth": "^1.13.0",
+    "pdfjs-dist": "^6.4.299",
+    "vitest": "^5.0.5"
+  }
+}
