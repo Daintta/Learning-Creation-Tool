@@ -211,6 +211,9 @@ h3 { font-size: 19px; margin: 28px 0 8px; }
 .callout-warning { border-left-color: var(--fault); }
 .callout-warning .callout-title { color: var(--fault); }
 .callout-example { border-left-color: var(--track); }
+.callout-note { border-left-color: var(--line); }
+.callout-update { border-left-color: #c98200; }
+.callout-update .callout-title { color: #c98200; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .callout { border-left-color: #6f8fbf; } :root:not([data-theme="light"]) .callout-principle { border-left-color: var(--lock);} :root:not([data-theme="light"]) .callout-warning { border-left-color: var(--fault);} :root:not([data-theme="light"]) .callout-example { border-left-color: var(--track);} }
 .figure { margin: 28px 0; }
 .figure-zoom { display: block; width: 100%; padding: 0; border: 1px solid var(--line); border-radius: var(--radius-m); background: #fff; cursor: zoom-in; overflow: hidden; }

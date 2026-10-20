@@ -38,7 +38,7 @@ const hid = (...parts) => createHash("sha1").update(parts.join("|")).digest("hex
 const log = (msg) => console.log(msg);
 
 function titleFromFile(file) {
-  return path.basename(file).replace(/\.(docx|pdf)$/i, "").replace(/^\d+[-_ ]*/, "").replace(/[-_]+/g, " ").trim() || "Untitled module";
+  return path.basename(file).replace(/\.(docx|pdf|md)$/i, "").replace(/^\d+[-_ ]*/, "").replace(/[-_]+/g, " ").trim() || "Untitled module";
 }
 
 async function loadConfig() {
@@ -84,7 +84,19 @@ async function readDocx(file, id) {
 // Knowledge Check or Answers section are escaped so they stay as text lines, not list items.
 // Local images are copied to assets/img/ and keep their alt text.
 async function readMarkdown(file, id) {
-  const src = (await readFile(file, "utf8")).replace(/\r\n/g, "\n");
+  let src = (await readFile(file, "utf8")).replace(/\r\n/g, "\n");
+  // Optional front matter (--- ... ---) gives the module title. It is not shown as lesson text.
+  let title = null;
+  const fm = src.match(/^---\n([\s\S]*?)\n---\n/);
+  if (fm) {
+    title = (fm[1].match(/^title:\s*(.+)$/m) || [])[1]?.trim() || null;
+    src = src.slice(fm[0].length);
+  }
+  // Callouts: ":::kind Optional title" ... ":::" become styled boxes. The body stays Markdown.
+  src = src.replace(/^:::(principle|note|example|warning|update)[ \t]*(.*)\n([\s\S]*?)^:::[ \t]*$/gm, (m, kind, heading, body) => {
+    const label = heading.trim() ? `<p class="callout-title">${esc(heading.trim())}</p>` : "";
+    return `<aside class="callout callout-${kind}">${label}\n\n${body.trim()}\n\n</aside>`;
+  });
   const prepared = src.split(/^(?=# )/m).map((chunk) => {
     const head = chunk.match(/^# (.*)$/m);
     const practice = head && /knowledge check|answer/i.test(head[1]);
@@ -123,18 +135,37 @@ async function readMarkdown(file, id) {
   }
   out += html.slice(last);
   if (noAlt.length) warnings.push(`${noAlt.length} image(s) have no alt text (image ${noAlt.join(", ")}). Add alt text in the ![...] part of the Markdown.`);
-  return { html: out, warnings };
+  return { html: out, warnings, title };
 }
 
 // Companion practice file: NN-Name-practice.md next to NN-Name.(docx|pdf|md). Every numbered line is
 // read as a question, so the whole file uses the Knowledge Check layout (questions, then an "Answers" heading).
 async function readPracticeFile(file) {
   const src = (await readFile(file, "utf8")).replace(/\r\n/g, "\n");
+  // Assessment layout ("## single", "## multi", "## truefalse"): same files as the assessments.
+  if (/^##\s+(single|multi|truefalse)\s*$/m.test(src)) {
+    const questions = parseAssessment(src, "practice", path.basename(file));
+    const practice = [];
+    let skipped = 0;
+    for (const q of questions) {
+      if (!["single", "multi", "truefalse"].includes(q.type)) { skipped += 1; continue; }
+      const letters = "ABCDEFGHIJ";
+      const chosen = q.type === "truefalse" ? [q.answer] : q.answer.split(",");
+      const answer = q.options.map((o, j) => (chosen.includes(o.id) ? letters[j] : null)).filter(Boolean);
+      practice.push({
+        n: practice.length + 1, prompt: q.prompt, multi: q.type === "multi" || answer.length > 1,
+        options: q.options.map((o, j) => ({ id: letters[j], text: o.text })), answer, rationale: q.explanation || "",
+      });
+    }
+    if (skipped) console.warn(`  note: ${path.basename(file)}: ${skipped} match/order question(s) skipped. Practice supports single, multi and true/false.`);
+    return { practice, numbered: questions.length };
+  }
+  // Knowledge Check layout: numbered questions with lettered options, then an "Answers" heading.
   const prepared = src.replace(/^(\s*)(\d+)\.(\s)/gm, "$1$2\\.$3");
   const lines = htmlToLines(marked.parse(prepared, { gfm: true }));
   const numbered = lines.filter((l) => /^\d+\.\s/.test(l)).length;
-  const questions = parseKnowledgeCheck(lines);
-  return { practice: questions, numbered };
+  const practice = parseKnowledgeCheck(lines);
+  return { practice, numbered };
 }
 
 // PDFs carry no heading tags, so headings are found from font size. The most common size (by
@@ -328,7 +359,7 @@ async function readModule(file, index) {
   const id = `m${pad2(index + 1)}`;
   const isPdf = /\.pdf$/i.test(file);
   const isMd = /\.md$/i.test(file);
-  const { html: raw, warnings } = isPdf ? await readPdf(file) : isMd ? await readMarkdown(file, id) : await readDocx(file, id);
+  const { html: raw, warnings, title: frontTitle } = isPdf ? await readPdf(file) : isMd ? await readMarkdown(file, id) : { ...(await readDocx(file, id)), title: null };
   const { terms, html } = extractKeyTerms(raw);
   const level = headingLevel(html);
   let { practice, sections } = extractPractice(splitSections(html, level));
@@ -354,7 +385,7 @@ async function readModule(file, index) {
     : "\"Key terms\" is in the text but no terms were read. Check the table has the header row Term | Definition.");
 
   const base = path.join(path.dirname(file), path.basename(file, path.extname(file)));
-  return { id, number: index + 1, title: titleFromFile(file), lessons, practice, terms, warnings, text: plain, assessmentFile: `${base}-assessment.md` };
+  return { id, number: index + 1, title: frontTitle || titleFromFile(file), lessons, practice, terms, warnings, text: plain, assessmentFile: `${base}-assessment.md` };
 }
 
 /* ---------- assessments ---------- */
