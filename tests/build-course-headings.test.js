@@ -28,7 +28,7 @@ describe('headingLevel and splitSections', () => {
 
 describe('build warnings for documents that split badly', () => {
   let root;
-  const approved = readFileSync(path.join(REPO, 'assessments', 'm01.md'), 'utf8');
+  const approved = readFileSync(path.join(REPO, 'course-docs', '01-Example-module-assessment.md'), 'utf8');
   const build = (docs) => {
     rmSync(path.join(root, 'course-docs'), { recursive: true, force: true });
     mkdirSync(path.join(root, 'course-docs'));
@@ -64,7 +64,7 @@ describe('build warnings for documents that split badly', () => {
 
 describe('PDF heading detection', () => {
   let root;
-  const approved = readFileSync(path.join(REPO, 'assessments', 'm01.md'), 'utf8');
+  const approved = readFileSync(path.join(REPO, 'course-docs', '01-Example-module-assessment.md'), 'utf8');
 
   beforeAll(() => {
     root = mkdtempSync(path.join(tmpdir(), 'course-pdf-'));

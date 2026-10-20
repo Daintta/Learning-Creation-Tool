@@ -11,7 +11,7 @@ const SCRIPT = path.join(REPO, 'scripts', 'build-course.mjs');
 
 describe('images in Word files', () => {
   let root;
-  const approved = readFileSync(path.join(REPO, 'assessments', 'm01.md'), 'utf8');
+  const approved = readFileSync(path.join(REPO, 'course-docs', '01-Example-module-assessment.md'), 'utf8');
   const build = (doc) => {
     rmSync(path.join(root, 'course-docs'), { recursive: true, force: true });
     mkdirSync(path.join(root, 'course-docs'));

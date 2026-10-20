@@ -174,13 +174,13 @@ describe('npm run build-course (command line)', () => {
   it('creates a blank template with --template and refuses to publish it', () => {
     const res = run('--template');
     expect(res.status).not.toBe(0);
-    expect(res.stderr).toMatch(/Unapproved drafts: assessments\/m01\.md/);
-    expect(readFileSync(path.join(root, 'assessments', 'm01.md'), 'utf8')).toMatch(/status:\s*draft/);
+    expect(res.stderr).toMatch(/Unapproved drafts: course-docs\/01-Example-module-assessment\.md/);
+    expect(readFileSync(path.join(root, 'course-docs', '01-Example-module-assessment.md'), 'utf8')).toMatch(/status:\s*draft/);
     expect(existsSync(path.join(root, 'content', 'catalog.js'))).toBe(false);
   });
 
   it('publishes once the draft line is removed', () => {
-    const file = path.join(root, 'assessments', 'm01.md');
+    const file = path.join(root, 'course-docs', '01-Example-module-assessment.md');
     const approved = readFileSync(file, 'utf8').replace(/^<!--\s*status:\s*draft.*\n/m, '');
     writeFileSync(file, approved);
     const res = run();
@@ -192,7 +192,7 @@ describe('npm run build-course (command line)', () => {
   });
 
   it('builds with drafts only when --allow-drafts is given, and warns', () => {
-    writeFileSync(path.join(root, 'assessments', 'm01.md'), '# t\n<!-- status: draft -->\n## single\nQ\n- a\n* b\n');
+    writeFileSync(path.join(root, 'course-docs', '01-Example-module-assessment.md'), '# t\n<!-- status: draft -->\n## single\nQ\n- a\n* b\n');
     const res = run('--allow-drafts');
     expect(res.status).toBe(0);
     expect(res.stdout).toMatch(/WARNING: building with unapproved drafts/);

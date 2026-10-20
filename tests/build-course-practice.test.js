@@ -71,7 +71,7 @@ describe('extractKeyTerms and htmlToLines', () => {
 
 describe('npm run build-course with practice and glossary', () => {
   let root;
-  const approved = readFileSync(path.join(REPO, 'assessments', 'm01.md'), 'utf8');
+  const approved = readFileSync(path.join(REPO, 'course-docs', '01-Example-module-assessment.md'), 'utf8');
   const run = () => spawnSync(process.execPath, [SCRIPT], {
     cwd: root, encoding: 'utf8', env: { ...process.env, COURSE_ROOT: root },
   });

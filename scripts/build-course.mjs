@@ -13,11 +13,13 @@
  *
  * Nothing is sent to any online service. Assessment questions are written by hand.
  */
-import { readFile, writeFile, readdir, mkdir, rm } from "node:fs/promises";
+import { readFile, writeFile, readdir, mkdir, rm, copyFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import mammoth from "mammoth";
+import { marked } from "marked";
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 
 const ROOT = process.env.COURSE_ROOT ? path.resolve(process.env.COURSE_ROOT) : path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -53,9 +55,9 @@ async function loadConfig() {
 async function findDocs() {
   const dir = path.join(ROOT, "course-docs");
   const names = (await readdir(dir))
-    .filter((n) => /\.(docx|pdf)$/i.test(n) && !n.startsWith("~$") && !n.startsWith("."))
+    .filter((n) => /\.(docx|pdf|md)$/i.test(n) && !/-(practice|assessment)\.md$/i.test(n) && !/^readme\.md$/i.test(n) && !n.startsWith("~$") && !n.startsWith("."))
     .sort();
-  if (!names.length) throw new Error("No .docx or .pdf files in course-docs/. Add the course documents there and run again.");
+  if (!names.length) throw new Error("No .docx, .pdf or .md files in course-docs/. Add the course documents there and run again.");
   return names.map((n) => path.join(dir, n));
 }
 
@@ -76,6 +78,63 @@ async function readDocx(file, id) {
   const warnings = messages.filter((m) => m.type === "warning").map((m) => m.message);
   if (noAlt.length) warnings.push(`${noAlt.length} image(s) have no alt text (image ${noAlt.join(", ")}). Add Alt Text in Word so screen readers can describe them.`);
   return { html: value, warnings };
+}
+
+// Markdown: each "# " heading is a section, the same as a Heading 1 in Word. Numbered lines inside a
+// Knowledge Check or Answers section are escaped so they stay as text lines, not list items.
+// Local images are copied to assets/img/ and keep their alt text.
+async function readMarkdown(file, id) {
+  const src = (await readFile(file, "utf8")).replace(/\r\n/g, "\n");
+  const prepared = src.split(/^(?=# )/m).map((chunk) => {
+    const head = chunk.match(/^# (.*)$/m);
+    const practice = head && /knowledge check|answer/i.test(head[1]);
+    return practice ? chunk.replace(/^(\s*)(\d+)\.(\s)/gm, "$1$2\\.$3") : chunk;
+  }).join("");
+  const html = marked.parse(prepared, { gfm: true });
+
+  const warnings = [];
+  const noAlt = [];
+  const images = [...html.matchAll(/<img src="([^"]+)"([^>]*)>/g)];
+  let out = "";
+  let last = 0;
+  let imageNo = 0;
+  for (const m of images) {
+    out += html.slice(last, m.index);
+    last = m.index + m[0].length;
+    const alt = (/alt="([^"]*)"/.exec(m[2]) || [])[1] || "";
+    const srcPath = m[1];
+    if (/^(https?:|data:)/i.test(srcPath)) {
+      warnings.push(`Image "${srcPath}" is a web link, so it is not copied. Save it into the document folder instead.`);
+      out += m[0];
+      continue;
+    }
+    const from = path.resolve(path.dirname(file), decodeURI(srcPath));
+    if (!existsSync(from)) {
+      warnings.push(`Image "${srcPath}" was not found next to the Markdown file.`);
+      out += m[0];
+      continue;
+    }
+    imageNo += 1;
+    const ext = path.extname(from).toLowerCase().replace(".", "") || "png";
+    const name = `${id}-image${imageNo}.${ext}`;
+    await copyFile(from, path.join(ROOT, "assets", "img", name));
+    if (!alt) noAlt.push(imageNo);
+    out += `<img src="assets/img/${name}" alt="${alt}">`;
+  }
+  out += html.slice(last);
+  if (noAlt.length) warnings.push(`${noAlt.length} image(s) have no alt text (image ${noAlt.join(", ")}). Add alt text in the ![...] part of the Markdown.`);
+  return { html: out, warnings };
+}
+
+// Companion practice file: NN-Name-practice.md next to NN-Name.(docx|pdf|md). Every numbered line is
+// read as a question, so the whole file uses the Knowledge Check layout (questions, then an "Answers" heading).
+async function readPracticeFile(file) {
+  const src = (await readFile(file, "utf8")).replace(/\r\n/g, "\n");
+  const prepared = src.replace(/^(\s*)(\d+)\.(\s)/gm, "$1$2\\.$3");
+  const lines = htmlToLines(marked.parse(prepared, { gfm: true }));
+  const numbered = lines.filter((l) => /^\d+\.\s/.test(l)).length;
+  const questions = parseKnowledgeCheck(lines);
+  return { practice: questions, numbered };
 }
 
 // PDFs carry no heading tags, so headings are found from font size. The most common size (by
@@ -128,7 +187,7 @@ async function readPdf(file) {
     const level = levelOf(l);
     const prev = blocks[blocks.length - 1];
     if (level) {
-      if (prev && prev.type === "h" && prev.level === level) prev.text += " " + l.text;
+      if (prev && prev.type === "h" && prev.level === level && (prev.text + " " + l.text).length <= 120) prev.text += " " + l.text;
       else blocks.push({ type: "h", level, text: l.text });
     } else if (prev && prev.type === "p" && !prev.closed) {
       prev.text += " " + l.text;
@@ -268,10 +327,19 @@ function extractPractice(sections) {
 async function readModule(file, index) {
   const id = `m${pad2(index + 1)}`;
   const isPdf = /\.pdf$/i.test(file);
-  const { html: raw, warnings } = isPdf ? await readPdf(file) : await readDocx(file, id);
+  const isMd = /\.md$/i.test(file);
+  const { html: raw, warnings } = isPdf ? await readPdf(file) : isMd ? await readMarkdown(file, id) : await readDocx(file, id);
   const { terms, html } = extractKeyTerms(raw);
   const level = headingLevel(html);
-  const { practice, sections } = extractPractice(splitSections(html, level));
+  let { practice, sections } = extractPractice(splitSections(html, level));
+  const companion = path.join(path.dirname(file), `${path.basename(file, path.extname(file))}-practice.md`);
+  if (existsSync(companion)) {
+    const from = await readPracticeFile(companion);
+    if (practice.length) warnings.push(`\"Knowledge Check\" in the document is ignored because ${path.basename(companion)} is present.`);
+    if (from.numbered !== from.practice.length) warnings.push(`${path.basename(companion)}: ${from.numbered} numbered question(s) found, ${from.practice.length} read. Check the options and Answers lines.`);
+    if (!from.practice.length) throw new Error(`${path.basename(companion)}: no practice questions were read`);
+    practice = from.practice;
+  }
   const lessons = lessonsFromSections(sections, id);
   if (!lessons.length) throw new Error(`${path.basename(file)}: no lesson text found in this document`);
 
@@ -285,7 +353,8 @@ async function readModule(file, index) {
     ? "\"Key terms\" is in the PDF text, but a PDF cannot hold a Key Terms table, so there are no glossary entries. Use a Word file for the glossary."
     : "\"Key terms\" is in the text but no terms were read. Check the table has the header row Term | Definition.");
 
-  return { id, number: index + 1, title: titleFromFile(file), lessons, practice, terms, warnings, text: plain };
+  const base = path.join(path.dirname(file), path.basename(file, path.extname(file)));
+  return { id, number: index + 1, title: titleFromFile(file), lessons, practice, terms, warnings, text: plain, assessmentFile: `${base}-assessment.md` };
 }
 
 /* ---------- assessments ---------- */
@@ -375,17 +444,20 @@ async function main() {
   const drafts = [];
   const assessments = [];
   for (const mod of modules) {
-    const file = path.join(ROOT, "assessments", `${mod.id}.md`);
+    // Companion file next to the document (NN-Title-assessment.md) is used first. assessments/mNN.md is still read if present.
+    const legacy = path.join(ROOT, "assessments", `${mod.id}.md`);
+    const file = existsSync(mod.assessmentFile) ? mod.assessmentFile : existsSync(legacy) ? legacy : mod.assessmentFile;
+    const label = path.relative(ROOT, file);
     let text = await readFile(file, "utf8").catch(() => null);
     if (text === null) {
-      if (!TEMPLATE) throw new Error(`No assessment for ${mod.id} (assessments/${mod.id}.md). Write one by hand, or run again with --template to create a blank one.`);
+      if (!TEMPLATE) throw new Error(`No assessment for ${mod.id}. Write ${label}, or run again with --template to create a blank one.`);
       text = templateDraft(mod);
       await writeFile(file, text, "utf8");
-      log(`  ${mod.id}  created assessments/${mod.id}.md from a blank template (needs writing)`);
+      log(`  ${mod.id}  created ${label} from a blank template (needs writing)`);
     }
-    if (DRAFT_RE.test(text)) drafts.push(`assessments/${mod.id}.md`);
-    const questions = parseAssessment(text, mod.id, `assessments/${mod.id}.md`);
-    if (!questions.length) throw new Error(`assessments/${mod.id}.md has no questions`);
+    if (DRAFT_RE.test(text)) drafts.push(label);
+    const questions = parseAssessment(text, mod.id, label);
+    if (!questions.length) throw new Error(`${label} has no questions`);
     assessments.push({ moduleId: mod.id, questions });
   }
   if (drafts.length && !ALLOW_DRAFTS) {

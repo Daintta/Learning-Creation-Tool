@@ -1,6 +1,6 @@
 # Learning Tool
 
-Build a self-paced online course from your own Word or PDF documents. Learners work through
+Build a self-paced online course from your own Word, PDF or Markdown documents. Learners work through
 each module, pass a short assessment and earn a printable certificate for each module, plus a
 programme certificate when every module is passed.
 
@@ -33,7 +33,7 @@ npm install
    npm run build-course -- --template
    ```
 
-4. Write the questions in each `assessments/mNN.md` file, then delete the `status: draft` line at the top.
+4. Write the questions in each module's `NN-Title-assessment.md` file, then delete the `status: draft` line at the top.
    Templates carry that line, so the build will not publish them until you have removed it.
 5. Build again. This time it succeeds only when every file is approved:
 
@@ -74,7 +74,7 @@ Settings that are not about the course, such as the storage key and the footer v
 
 ## Editing assessments
 
-Each module's questions are in `assessments/mNN.md`. Edit them in any text editor, then run
+Each module's questions are in its `NN-Title-assessment.md` file, next to its document. Edit them in any text editor, then run
 `npm run build-course` to check them and rebuild.
 
 ```markdown
@@ -141,9 +141,9 @@ assessment files and the build scripts stay in the repository and are not publis
 ## Folder structure
 
 ```
-course-docs/                  your Word and PDF documents (see course-docs/README.md)
+course-docs/                  your Word, PDF or Markdown documents (see course-docs/README.md)
 course.config.json            course settings
-assessments/mNN.md            assessment questions, one file per module
+course-docs/NN-Title-assessment.md   assessment questions, one file per module (next to its document)
 scripts/build-course.mjs      the build: documents and assessments to site content
 index.html                    the app
 assets/css/app.css            styles
